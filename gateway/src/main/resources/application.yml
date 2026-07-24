@@ -16,12 +16,6 @@ spring:
       #   uri: lb://nacos上的服务名
       #   predicates: 匹配路径
       routes:
-        # ===== 示例路由（请根据实际服务修改） =====
-        - id: scaffold-demo
-          uri: lb://scaffold-demo
-          predicates:
-            - Path=/hello/**,/health/**
-
         - id: scaffold-auth
           uri: lb://scaffold-auth
           predicates:
