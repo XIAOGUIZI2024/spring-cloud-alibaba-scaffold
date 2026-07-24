@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>cn.hollis</groupId>
+        <artifactId>microservice-scaffold</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <groupId>cn.hollis</groupId>
+    <artifactId>service-template</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <description>微服务模板 - 复制此模块创建新服务</description>
+
+    <properties>
+        <application.name>scaffold-template</application.name>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <!-- 配置中心 + 服务发现 -->
+        <dependency>
+            <groupId>cn.hollis</groupId>
+            <artifactId>common-config</artifactId>
+        </dependency>
+
+        <!-- Web 层 -->
+        <dependency>
+            <groupId>cn.hollis</groupId>
+            <artifactId>common-web</artifactId>
+        </dependency>
+
+        <!-- API 接口定义 -->
+        <dependency>
+            <groupId>cn.hollis</groupId>
+            <artifactId>common-api</artifactId>
+        </dependency>
+
+        <!-- Dubbo RPC -->
+        <dependency>
+            <groupId>cn.hollis</groupId>
+            <artifactId>common-rpc</artifactId>
+        </dependency>
+
+        <!-- ============================================ -->
+        <!-- 按需添加以下模块（从 common 中取消注释即可）  -->
+        <!-- ============================================ -->
+
+        <!-- 数据库：common-datasource （需自行从原项目引入） -->
+        <!-- 缓存：common-cache （需自行从原项目引入） -->
+        <!-- 认证：common-sa-token （需自行从原项目引入） -->
+        <!-- 消息队列：common-mq （需自行从原项目引入） -->
+        <!-- 分布式锁：common-lock （需自行从原项目引入） -->
+        <!-- 分布式事务：common-seata （需自行从原项目引入） -->
+
+        <!-- ============ 测试 ============ -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>1.4.200</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

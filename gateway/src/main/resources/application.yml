@@ -1,0 +1,32 @@
+spring:
+  cloud:
+    gateway:
+      # 全局 CORS 配置
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin, RETAIN_UNIQUE
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedHeaders: '*'
+            allowedMethods: '*'
+            allowedOrigins: '*'
+      # ========== 路由配置 ==========
+      # 格式：
+      #   id: 服务标识（任意唯一名称）
+      #   uri: lb://nacos上的服务名
+      #   predicates: 匹配路径
+      routes:
+        # ===== 示例路由（请根据实际服务修改） =====
+        - id: scaffold-demo
+          uri: lb://scaffold-demo
+          predicates:
+            - Path=/hello/**,/health/**
+
+        # ===== 新增服务路由模板 =====
+        # - id: your-service
+        #   uri: lb://your-service-name
+        #   predicates:
+        #     - Path=/your-api/**
+
+server:
+  port: 8081
