@@ -22,6 +22,11 @@ spring:
           predicates:
             - Path=/hello/**,/health/**
 
+        - id: scaffold-user
+          uri: lb://scaffold-user
+          predicates:
+            - Path=/auth/**,/user/**
+
         # ===== 新增服务路由模板 =====
         # - id: your-service
         #   uri: lb://your-service-name

@@ -32,6 +32,7 @@
         <module>gateway</module>
         <module>service-template</module>
         <module>service-demo</module>
+        <module>service-user</module>
     </modules>
 
     <dependencyManagement>
@@ -93,6 +94,30 @@
             <dependency>
                 <groupId>cn.hollis</groupId>
                 <artifactId>common-web</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>cn.hollis</groupId>
+                <artifactId>common-cache</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>cn.hollis</groupId>
+                <artifactId>common-datasource</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>cn.hollis</groupId>
+                <artifactId>common-sa-token</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>cn.hollis</groupId>
+                <artifactId>common-lock</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
