@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="cn.hollis.nft.turbo.goods.infrastructure.mapper.GoodsMapper">
+    <resultMap id="BaseResultMap" type="cn.hollis.nft.turbo.goods.domain.entity.Goods">
+        <result property="id" column="ID"/>
+        <result property="gmtCreate" column="GMT_CREATE"/>
+        <result property="gmtModified" column="GMT_MODIFIED"/>
+        <result property="goodsId" column="GOODS_ID"/>
+        <result property="goodsName" column="GOODS_NAME"/>
+        <result property="goodsType" column="GOODS_TYPE"/>
+        <result property="state" column="STATE"/>
+        <result property="price" column="PRICE"/>
+        <result property="inventory" column="INVENTORY"/>
+        <result property="lockedInventory" column="LOCKED_INVENTORY"/>
+        <result property="coverUrl" column="COVER_URL"/>
+        <result property="saleTime" column="SALE_TIME"/>
+        <result property="deleted" column="DELETED"/>
+        <result property="lockVersion" column="LOCK_VERSION"/>
+    </resultMap>
+
+    <select id="findByGoodsId" resultMap="BaseResultMap">
+        SELECT * FROM goods WHERE deleted = 0
+        <if test="goodsId != null">AND goods_id = #{goodsId}</if>
+    </select>
+
+    <!-- TODO: 添加更多 SQL（分页查询、库存扣减、上下架等） -->
+</mapper>

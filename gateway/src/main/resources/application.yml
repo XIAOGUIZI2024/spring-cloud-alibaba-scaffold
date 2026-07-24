@@ -26,6 +26,11 @@ spring:
           predicates:
             - Path=/user/**
 
+        - id: scaffold-goods
+          uri: lb://scaffold-goods
+          predicates:
+            - Path=/goods/**
+
         # ===== 新增服务路由模板 =====
         # - id: your-service
         #   uri: lb://your-service-name

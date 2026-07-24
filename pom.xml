@@ -33,6 +33,7 @@
         <module>service-template</module>
         <module>service-auth</module>
         <module>service-user</module>
+        <module>service-goods</module>
     </modules>
 
     <dependencyManagement>
