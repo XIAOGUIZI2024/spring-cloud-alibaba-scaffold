@@ -72,4 +72,13 @@ public class UserFacadeServiceImpl implements UserFacadeService {
     public UserOperatorResponse active(UserActiveRequest request) {
         throw new UnsupportedOperationException("not implemented yet");
     }
+
+    @Override
+    public UserQueryResponse<UserInfo> queryByTelephone(String telephone) {
+        User user = userService.findByTelephone(telephone);
+        UserQueryResponse<UserInfo> response = new UserQueryResponse<>();
+        response.setSuccess(true);
+        response.setData(user != null ? UserConvertor.INSTANCE.mapToVo(user) : null);
+        return response;
+    }
 }

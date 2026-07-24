@@ -1,5 +1,6 @@
-package cn.hollis.nft.turbo.user.controller;
+package cn.hollis.nft.turbo.auth.controller;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -13,6 +14,7 @@ public class LoginParam {
     /**
      * 手机号
      */
+    @NotBlank(message = "手机号不能为空")
     private String telephone;
 
     /**

@@ -54,4 +54,9 @@ public interface UserFacadeService {
      */
     UserOperatorResponse active(UserActiveRequest userActiveRequest);
 
+    /**
+     * 通过手机号查询（简化版，避免 Dubbo 序列化条件接口问题）
+     */
+    UserQueryResponse<UserInfo> queryByTelephone(String telephone);
+
 }
