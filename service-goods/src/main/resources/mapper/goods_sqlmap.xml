@@ -15,6 +15,11 @@
         <result property="lockedInventory" column="LOCKED_INVENTORY"/>
         <result property="coverUrl" column="COVER_URL"/>
         <result property="saleTime" column="SALE_TIME"/>
+        <result property="color" column="COLOR"/>
+        <result property="origin" column="ORIGIN"/>
+        <result property="shape" column="SHAPE"/>
+        <result property="transparency" column="TRANSPARENCY"/>
+        <result property="variety" column="VARIETY"/>
         <result property="deleted" column="DELETED"/>
         <result property="lockVersion" column="LOCK_VERSION"/>
     </resultMap>
@@ -23,6 +28,28 @@
         SELECT * FROM goods WHERE deleted = 0
         <if test="goodsId != null">AND goods_id = #{goodsId}</if>
     </select>
+
+    <update id="updateByGoodsId">
+        UPDATE goods
+        SET gmt_modified = NOW()
+        <if test="goods.goodsName != null">, goods_name = #{goods.goodsName}</if>
+        <if test="goods.goodsType != null">, goods_type = #{goods.goodsType}</if>
+        <if test="goods.state != null">, state = #{goods.state}</if>
+        <if test="goods.price != null">, price = #{goods.price}</if>
+        <if test="goods.inventory != null">, inventory = #{goods.inventory}</if>
+        <if test="goods.coverUrl != null">, cover_url = #{goods.coverUrl}</if>
+        <if test="goods.saleTime != null">, sale_time = #{goods.saleTime}</if>
+        <if test="goods.color != null">, color = #{goods.color}</if>
+        <if test="goods.origin != null">, origin = #{goods.origin}</if>
+        <if test="goods.shape != null">, shape = #{goods.shape}</if>
+        <if test="goods.transparency != null">, transparency = #{goods.transparency}</if>
+        <if test="goods.variety != null">, variety = #{goods.variety}</if>
+        WHERE goods_id = #{goods.goodsId} AND deleted = 0
+    </update>
+
+    <update id="deleteByGoodsId">
+        UPDATE goods SET deleted = 1, gmt_modified = NOW() WHERE goods_id = #{goodsId}
+    </update>
 
     <!-- TODO: 添加更多 SQL（分页查询、库存扣减、上下架等） -->
 </mapper>

@@ -26,4 +26,14 @@ public class GoodsCreateRequest {
     private Integer inventory;
 
     private String coverUrl;
+
+    private String color;           // 颜色
+
+    private String origin;          // 产地
+
+    private String shape;           // 形状：圆形、椭圆、方形、随形等
+
+    private String transparency;    // 透明度/水头：透明、半透明、不透明
+
+    private String variety;         // 种水：玻璃种、高冰种、冰种、糯冰种、糯化种、细糯种、糯种、豆种等
 }

@@ -3,6 +3,7 @@ package cn.hollis.nft.turbo.api.goods.service;
 import cn.hollis.nft.turbo.api.goods.request.GoodsCreateRequest;
 import cn.hollis.nft.turbo.api.goods.request.GoodsPageQueryRequest;
 import cn.hollis.nft.turbo.api.goods.request.GoodsQueryRequest;
+import cn.hollis.nft.turbo.api.goods.request.GoodsUpdateRequest;
 import cn.hollis.nft.turbo.api.goods.response.GoodsQueryResponse;
 import cn.hollis.nft.turbo.base.response.PageResponse;
 
@@ -25,4 +26,14 @@ public interface GoodsFacadeService {
      * 分页查询商品
      */
     PageResponse<GoodsQueryResponse> pageQuery(GoodsPageQueryRequest request);
+
+    /**
+     * 更新商品
+     */
+    GoodsQueryResponse update(GoodsUpdateRequest request);
+
+    /**
+     * 删除商品
+     */
+    GoodsQueryResponse delete(GoodsQueryRequest request);
 }
