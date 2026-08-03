@@ -12,6 +12,7 @@ import cn.hollis.nft.turbo.web.vo.Result;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.dubbo.config.annotation.DubboReference;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -19,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
  * <p>
  * 通过 Dubbo RPC 调用 service-user 查询和注册用户
  *
- * @author Hollis
+ * @author DaDagui
  */
 @Slf4j
 @RestController
@@ -29,7 +30,26 @@ public class AuthController {
     @DubboReference(version = "1.0.0")
     private UserFacadeService userFacadeService;
 
+    @DubboReference(version = "1.0.0")
+    private NoticeFacadeService noticeFacadeService;
+
+
+    /**
+     * 默认超过登陆时间：7天
+     */
     private static final Integer DEFAULT_LOGIN_SESSION_TIMEOUT = 60 * 60 * 24 * 7;
+
+
+    /**
+     * 验证码发送请求
+     * @param telephone
+     * @return
+     */
+    @GetMapping("/sendCaptcha")
+    public Result<Boolean> sendCaptcha(@IsMobile String telephone) {
+        NoticeResponse noticeResponse = noticeFacadeService.generateAndSendSmsCaptcha(telephone);
+        return Result.success(noticeResponse.getSuccess());
+    }
 
     /**
      * 登录（手机号登录，用户不存在则自动注册）

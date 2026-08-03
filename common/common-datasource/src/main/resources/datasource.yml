@@ -1,6 +1,4 @@
 spring:
-  autoconfigure:
-    exclude: org.apache.shardingsphere.spring.boot.ShardingSphereAutoConfiguration
   datasource:
     url: ${nft.turbo.mysql.url}
     username: ${nft.turbo.mysql.username}

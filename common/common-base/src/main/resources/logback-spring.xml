@@ -40,6 +40,10 @@
         <appender-ref ref="APPLICATION"/>
     </appender>
 
+    <!-- 屏蔽 Nacos 客户端的 INFO 噪声（启动/关闭/心跳），只保留 WARN 及以上 -->
+    <logger name="com.alibaba.nacos" level="WARN"/>
+    <logger name="com.alibaba.nacos.client.naming" level="WARN"/>
+
     <root level="INFO">
         <appender-ref ref="ASYNC"/>
         <appender-ref ref="CONSOLE"/>

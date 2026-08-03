@@ -12,6 +12,7 @@ import cn.hollis.nft.turbo.rpc.facade.Facade;
 import cn.hollis.nft.turbo.user.domain.entity.User;
 import cn.hollis.nft.turbo.user.domain.entity.convertor.UserConvertor;
 import cn.hollis.nft.turbo.user.domain.service.UserService;
+import jakarta.annotation.Resource;
 import org.apache.dubbo.config.annotation.DubboService;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -23,7 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 @DubboService(version = "1.0.0")
 public class UserFacadeServiceImpl implements UserFacadeService {
 
-    @Autowired
+    @Resource
     private UserService userService;
 
     @Override
