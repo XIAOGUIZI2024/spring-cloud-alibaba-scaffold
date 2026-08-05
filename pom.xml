@@ -34,6 +34,7 @@
         <module>service-auth</module>
         <module>service-user</module>
         <module>service-goods</module>
+        <module>service-notice</module>
     </modules>
 
     <dependencyManagement>
@@ -119,6 +120,18 @@
             <dependency>
                 <groupId>cn.hollis</groupId>
                 <artifactId>common-lock</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>cn.hollis</groupId>
+                <artifactId>common-limiter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>cn.hollis</groupId>
+                <artifactId>common-sms</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

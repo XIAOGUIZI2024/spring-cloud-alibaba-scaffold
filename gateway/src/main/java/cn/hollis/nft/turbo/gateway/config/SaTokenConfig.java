@@ -41,7 +41,6 @@ public class SaTokenConfig {
 
                 // ---- 鉴权规则 ----
                 .setAuth(obj -> {
-
                     // ===== 第一层：登录校验（所有接口都要过） =====
                     SaRouter.match("/**").check(r -> StpUtil.checkLogin());
 
