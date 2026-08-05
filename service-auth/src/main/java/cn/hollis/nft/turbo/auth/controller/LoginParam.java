@@ -18,6 +18,12 @@ public class LoginParam {
     private String telephone;
 
     /**
+     * 验证码
+     */
+    @NotBlank(message = "验证码不能为空")
+    private String captcha;
+
+    /**
      * 邀请码（注册时使用）
      */
     private String inviteCode;
