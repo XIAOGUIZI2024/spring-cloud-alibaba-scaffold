@@ -2,6 +2,7 @@ package cn.hollis.nft.turbo.user.facade;
 
 import cn.hollis.nft.turbo.api.user.request.*;
 import cn.hollis.nft.turbo.api.user.request.condition.UserIdQueryCondition;
+import cn.hollis.nft.turbo.api.user.request.condition.UserPhoneAndPasswordQueryCondition;
 import cn.hollis.nft.turbo.api.user.request.condition.UserPhoneQueryCondition;
 import cn.hollis.nft.turbo.api.user.response.UserOperatorResponse;
 import cn.hollis.nft.turbo.api.user.response.UserQueryResponse;
@@ -34,6 +35,9 @@ public class UserFacadeServiceImpl implements UserFacadeService {
                 yield userService.findById(userIdQueryCondition.getUserId());
             case UserPhoneQueryCondition userPhoneQueryCondition:
                 yield userService.findByTelephone(userPhoneQueryCondition.getTelephone());
+            case UserPhoneAndPasswordQueryCondition userPhoneAndPasswordQueryCondition:
+                yield userService.findByTelephoneAndPass(userPhoneAndPasswordQueryCondition.getTelephone(),
+                        userPhoneAndPasswordQueryCondition.getPassword());
             default:
                 throw new UnsupportedOperationException("unsupported query condition");
         };
@@ -46,8 +50,18 @@ public class UserFacadeServiceImpl implements UserFacadeService {
 
     @Override
     public PageResponse<UserInfo> pageQuery(UserPageQueryRequest request) {
-        // 简化实现
-        return PageResponse.of(null, 0, request.getPageSize(), request.getCurrentPage());
+        PageResponse<User> queryResult = userService.pageQueryByState(
+                request.getKeyWord(), request.getState(), request.getCurrentPage(), request.getPageSize());
+        PageResponse<UserInfo> response = new PageResponse<>();
+        if (!queryResult.getSuccess()) {
+            response.setSuccess(false);
+            return response;
+        }
+        response.setSuccess(true);
+        response.setDatas(UserConvertor.INSTANCE.mapToVo(queryResult.getDatas()));
+        response.setCurrentPage(queryResult.getCurrentPage());
+        response.setPageSize(queryResult.getPageSize());
+        return response;
     }
 
     @Override
@@ -59,19 +73,19 @@ public class UserFacadeServiceImpl implements UserFacadeService {
     @Override
     @Facade
     public UserOperatorResponse modify(UserModifyRequest request) {
-        throw new UnsupportedOperationException("not implemented yet");
+        return userService.modify(request);
     }
 
     @Override
     @Facade
     public UserOperatorResponse auth(UserAuthRequest request) {
-        throw new UnsupportedOperationException("not implemented yet");
+        return userService.auth(request);
     }
 
     @Override
     @Facade
     public UserOperatorResponse active(UserActiveRequest request) {
-        throw new UnsupportedOperationException("not implemented yet");
+        return userService.active(request);
     }
 
     @Override

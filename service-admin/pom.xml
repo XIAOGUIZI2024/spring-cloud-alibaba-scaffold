@@ -11,67 +11,68 @@
     </parent>
 
     <groupId>cn.hollis</groupId>
-    <artifactId>service-user</artifactId>
+    <artifactId>service-admin</artifactId>
     <version>1.0.0-SNAPSHOT</version>
-    <description>用户服务 - 登录注册 + 用户管理</description>
+    <description>管理后台 - 用户管理（独立部署，不经网关）</description>
 
     <properties>
-        <application.name>scaffold-user</application.name>
+        <application.name>scaffold-admin</application.name>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <dependencies>
+        <!-- 配置中心 + 服务发现 -->
         <dependency>
             <groupId>cn.hollis</groupId>
             <artifactId>common-config</artifactId>
         </dependency>
+
+        <!-- Web 层 -->
         <dependency>
             <groupId>cn.hollis</groupId>
             <artifactId>common-web</artifactId>
         </dependency>
+
+        <!-- API 接口定义 -->
         <dependency>
             <groupId>cn.hollis</groupId>
             <artifactId>common-api</artifactId>
         </dependency>
+
+        <!-- Dubbo RPC -->
         <dependency>
             <groupId>cn.hollis</groupId>
             <artifactId>common-rpc</artifactId>
         </dependency>
+
+        <!-- 缓存：提供 Redis 连接，支撑 Sa-Token 登录态存储 -->
         <dependency>
             <groupId>cn.hollis</groupId>
             <artifactId>common-cache</artifactId>
         </dependency>
-        <dependency>
-            <groupId>cn.hollis</groupId>
-            <artifactId>common-datasource</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>cn.hollis</groupId>
-            <artifactId>common-lock</artifactId>
-        </dependency>
+
+        <!-- Sa-Token 权限认证 -->
         <dependency>
             <groupId>cn.hollis</groupId>
             <artifactId>common-sa-token</artifactId>
         </dependency>
-        <dependency>
-            <groupId>cn.hollis</groupId>
-            <artifactId>common-file</artifactId>
-        </dependency>
 
-        <!-- TEST -->
+        <!-- ============ 测试 ============ -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <version>1.4.200</version>
             <scope>test</scope>
         </dependency>
+
     </dependencies>
 
     <build>

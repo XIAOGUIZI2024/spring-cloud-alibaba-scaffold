@@ -1,40 +1,130 @@
 package cn.hollis.nft.turbo.user.domain.service;
 
+import cn.hollis.nft.turbo.api.user.constant.UserOperateTypeEnum;
 import cn.hollis.nft.turbo.api.user.constant.UserStateEnum;
+import cn.hollis.nft.turbo.api.user.request.UserActiveRequest;
+import cn.hollis.nft.turbo.api.user.request.UserAuthRequest;
+import cn.hollis.nft.turbo.api.user.request.UserModifyRequest;
 import cn.hollis.nft.turbo.api.user.response.UserOperatorResponse;
+import cn.hollis.nft.turbo.api.user.response.data.InviteRankInfo;
+import cn.hollis.nft.turbo.base.exception.BizException;
+import cn.hollis.nft.turbo.base.exception.RepoErrorCode;
+import cn.hollis.nft.turbo.base.response.PageResponse;
 import cn.hollis.nft.turbo.lock.DistributeLock;
 import cn.hollis.nft.turbo.user.domain.entity.User;
+import cn.hollis.nft.turbo.user.domain.entity.convertor.UserConvertor;
 import cn.hollis.nft.turbo.user.infrastructure.exception.UserErrorCode;
 import cn.hollis.nft.turbo.user.infrastructure.exception.UserException;
 import cn.hollis.nft.turbo.user.infrastructure.mapper.UserMapper;
 import cn.hutool.core.lang.Assert;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.crypto.digest.DigestUtil;
+import com.alicp.jetcache.Cache;
+import com.alicp.jetcache.CacheManager;
+import com.alicp.jetcache.anno.CacheInvalidate;
+import com.alicp.jetcache.anno.CacheRefresh;
+import com.alicp.jetcache.anno.CacheType;
+import com.alicp.jetcache.anno.Cached;
+import com.alicp.jetcache.template.QuickConfig;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import jakarta.annotation.PostConstruct;
+import org.apache.commons.lang3.StringUtils;
+import org.redisson.api.RBloomFilter;
+import org.redisson.api.RLock;
+import org.redisson.api.RScoredSortedSet;
+import org.redisson.api.RedissonClient;
+import org.redisson.client.protocol.ScoredEntry;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
 import static cn.hollis.nft.turbo.user.infrastructure.exception.UserErrorCode.*;
 
 /**
- * 用户服务（简化版）
+ * 用户服务
+ * <p>
+ * 全量对齐参考项目：注册/认证/激活/冻结/解冻/修改 + 邀请排行榜（Redisson 有序集合）+
+ * 用户缓存（JetCache）+ 昵称/邀请码布隆过滤器 + 操作流水
  *
  * @author hollis
  */
 @Service
-public class UserService extends ServiceImpl<UserMapper, User> {
+public class UserService extends ServiceImpl<UserMapper, User> implements InitializingBean {
 
     private static final String DEFAULT_NICK_NAME_PREFIX = "藏家_";
 
-    /**
-     * 注册时生成昵称/邀请码去重的最大重试次数
-     */
-    private static final int MAX_REGISTER_RETRY_TIMES = 5;
-
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private AuthService authService;
+
+    @Autowired
+    private UserOperateStreamService userOperateStreamService;
+
+    @Autowired
+    private RedissonClient redissonClient;
+
+    @Autowired
+    private CacheManager cacheManager;
+
+    @Autowired
+    private UserCacheDelayDeleteService userCacheDelayDeleteService;
+
+    /**
+     * 用户名布隆过滤器
+     */
+    private RBloomFilter<String> nickNameBloomFilter;
+
+    /**
+     * 邀请码布隆过滤器
+     */
+    private RBloomFilter<String> inviteCodeBloomFilter;
+
+    /**
+     * 邀请排行榜
+     */
+    private RScoredSortedSet<String> inviteRank;
+
+    /**
+     * 通过用户ID对用户信息做的缓存
+     */
+    private Cache<String, User> idUserCache;
+
+    @PostConstruct
+    public void init() {
+        QuickConfig idQc = QuickConfig.newBuilder(":user:cache:id:")
+                .cacheType(CacheType.BOTH)
+                .expire(Duration.ofHours(2))
+                .syncLocal(true)
+                .build();
+        idUserCache = cacheManager.getOrCreateCache(idQc);
+    }
+
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        this.nickNameBloomFilter = redissonClient.getBloomFilter("nickName");
+        if (nickNameBloomFilter != null && !nickNameBloomFilter.isExists()) {
+            this.nickNameBloomFilter.tryInit(100000L, 0.01);
+        }
+
+        this.inviteCodeBloomFilter = redissonClient.getBloomFilter("inviteCode");
+        if (inviteCodeBloomFilter != null && !inviteCodeBloomFilter.isExists()) {
+            this.inviteCodeBloomFilter.tryInit(100000L, 0.01);
+        }
+
+        this.inviteRank = redissonClient.getScoredSortedSet("inviteRank");
+    }
 
     /**
      * 注册
@@ -42,22 +132,13 @@ public class UserService extends ServiceImpl<UserMapper, User> {
     @DistributeLock(keyExpression = "#telephone", scene = "USER_REGISTER")
     @Transactional(rollbackFor = Exception.class)
     public UserOperatorResponse register(String telephone, String inviteCode) {
-        if (userMapper.findByTelephone(telephone) != null) {
-            throw new UserException(DUPLICATE_TELEPHONE_NUMBER);
-        }
-
-        // 生成昵称与用户自己的邀请码，用 DB 查询兜底去重（6位随机串碰撞概率极低）
         String defaultNickName;
         String randomString;
-        int retryTimes = 0;
         do {
             randomString = RandomUtil.randomString(6).toUpperCase();
             //前缀 + 6位随机数 + 手机号后四位
             defaultNickName = DEFAULT_NICK_NAME_PREFIX + randomString + telephone.substring(7, 11);
-            retryTimes++;
-        } while (retryTimes < MAX_REGISTER_RETRY_TIMES
-                && (userMapper.findByNickname(defaultNickName) != null
-                || userMapper.findByInviteCode(randomString) != null));
+        } while (nickNameExist(defaultNickName) || inviteCodeExist(randomString));
 
         // 解析传入的邀请码，定位邀请人
         String inviterId = null;
@@ -68,14 +149,219 @@ public class UserService extends ServiceImpl<UserMapper, User> {
             }
         }
 
-        User user = new User();
-        user.register(telephone, defaultNickName, telephone, inviteCode, null);
-        boolean saved = save(user);
-        Assert.isTrue(saved, UserErrorCode.USER_OPERATE_FAILED.getCode());
+        //在极端并发情况下，可能会存在用户名或邀请码重复的情况，代码中不做特殊处理，靠数据库唯一索引保证
+        User user = register(telephone, defaultNickName, telephone, randomString, inviterId);
+        Assert.notNull(user, UserErrorCode.USER_OPERATE_FAILED.getCode());
 
-        UserOperatorResponse response = new UserOperatorResponse();
-        response.setSuccess(true);
-        return response;
+        addNickName(defaultNickName);
+        addInviteCode(randomString);
+        updateInviteRank(inviterId);
+        updateUserCache(user.getId().toString(), user);
+
+        //加入流水
+        long streamResult = userOperateStreamService.insertStream(user, UserOperateTypeEnum.REGISTER);
+        Assert.notNull(streamResult, () -> new BizException(RepoErrorCode.UPDATE_FAILED));
+
+        UserOperatorResponse userOperatorResponse = new UserOperatorResponse();
+        userOperatorResponse.setSuccess(true);
+
+        return userOperatorResponse;
+    }
+
+    /**
+     * 管理员注册
+     */
+    @DistributeLock(keyExpression = "#telephone", scene = "USER_REGISTER")
+    @Transactional(rollbackFor = Exception.class)
+    public UserOperatorResponse registerAdmin(String telephone, String password) {
+        User user = registerAdmin(telephone, telephone, password);
+        Assert.notNull(user, UserErrorCode.USER_OPERATE_FAILED.getCode());
+        idUserCache.put(user.getId().toString(), user);
+
+        //加入流水
+        long streamResult = userOperateStreamService.insertStream(user, UserOperateTypeEnum.REGISTER);
+        Assert.notNull(streamResult, () -> new BizException(RepoErrorCode.UPDATE_FAILED));
+
+        UserOperatorResponse userOperatorResponse = new UserOperatorResponse();
+        userOperatorResponse.setSuccess(true);
+
+        return userOperatorResponse;
+    }
+
+    /**
+     * 注册（内部：落库）
+     */
+    private User register(String telephone, String nickName, String password, String inviteCode, String inviterId) {
+        if (userMapper.findByTelephone(telephone) != null) {
+            throw new UserException(DUPLICATE_TELEPHONE_NUMBER);
+        }
+
+        User user = new User();
+        // 无密码注册时以手机号作为初始密码；inviteCode 存新生成的邀请码，inviterId 存邀请人ID
+        user.register(telephone, nickName, password, inviteCode, inviterId);
+        return save(user) ? user : null;
+    }
+
+    /**
+     * 管理员注册（内部：落库）
+     */
+    private User registerAdmin(String telephone, String nickName, String password) {
+        if (userMapper.findByTelephone(telephone) != null) {
+            throw new UserException(DUPLICATE_TELEPHONE_NUMBER);
+        }
+
+        User user = new User();
+        user.registerAdmin(telephone, nickName, password);
+        return save(user) ? user : null;
+    }
+
+    /**
+     * 实名认证
+     */
+    @CacheInvalidate(name = ":user:cache:id:", key = "#userAuthRequest.userId")
+    @Transactional(rollbackFor = Exception.class)
+    public UserOperatorResponse auth(UserAuthRequest userAuthRequest) {
+        UserOperatorResponse userOperatorResponse = new UserOperatorResponse();
+        User user = userMapper.findById(userAuthRequest.getUserId());
+        Assert.notNull(user, () -> new UserException(USER_NOT_EXIST));
+
+        // 已认证或已激活，幂等返回
+        if (user.getState() == UserStateEnum.AUTH || user.getState() == UserStateEnum.ACTIVE) {
+            userOperatorResponse.setSuccess(true);
+            userOperatorResponse.setUser(UserConvertor.INSTANCE.mapToVo(user));
+            return userOperatorResponse;
+        }
+
+        Assert.isTrue(user.getState() == UserStateEnum.INIT, () -> new UserException(USER_STATUS_IS_NOT_INIT));
+        // Mock 认证校验（恒通过），后续可替换为真实三方校验
+        Assert.isTrue(authService.checkAuth(userAuthRequest.getRealName(), userAuthRequest.getIdCard()),
+                () -> new UserException(USER_AUTH_FAIL));
+        user.auth(userAuthRequest.getRealName(), userAuthRequest.getIdCard());
+        boolean result = updateById(user);
+        if (result) {
+            //加入流水
+            long streamResult = userOperateStreamService.insertStream(user, UserOperateTypeEnum.AUTH);
+            Assert.notNull(streamResult, () -> new BizException(RepoErrorCode.UPDATE_FAILED));
+            userOperatorResponse.setSuccess(true);
+            userOperatorResponse.setUser(UserConvertor.INSTANCE.mapToVo(user));
+        } else {
+            userOperatorResponse.setSuccess(false);
+            userOperatorResponse.setResponseCode(UserErrorCode.USER_OPERATE_FAILED.getCode());
+            userOperatorResponse.setResponseMessage(UserErrorCode.USER_OPERATE_FAILED.getMessage());
+        }
+        return userOperatorResponse;
+    }
+
+    /**
+     * 用户激活
+     */
+    @CacheInvalidate(name = ":user:cache:id:", key = "#userActiveRequest.userId")
+    @Transactional(rollbackFor = Exception.class)
+    public UserOperatorResponse active(UserActiveRequest userActiveRequest) {
+        UserOperatorResponse userOperatorResponse = new UserOperatorResponse();
+        User user = userMapper.findById(userActiveRequest.getUserId());
+        Assert.notNull(user, () -> new UserException(USER_NOT_EXIST));
+        Assert.isTrue(user.getState() == UserStateEnum.AUTH, () -> new UserException(USER_STATUS_IS_NOT_AUTH));
+        user.active(userActiveRequest.getBlockChainUrl(), userActiveRequest.getBlockChainPlatform());
+        boolean result = updateById(user);
+        if (result) {
+            //加入流水
+            long streamResult = userOperateStreamService.insertStream(user, UserOperateTypeEnum.ACTIVE);
+            Assert.notNull(streamResult, () -> new BizException(RepoErrorCode.UPDATE_FAILED));
+            userOperatorResponse.setSuccess(true);
+        } else {
+            userOperatorResponse.setSuccess(false);
+            userOperatorResponse.setResponseCode(UserErrorCode.USER_OPERATE_FAILED.getCode());
+            userOperatorResponse.setResponseMessage(UserErrorCode.USER_OPERATE_FAILED.getMessage());
+        }
+        return userOperatorResponse;
+    }
+
+    /**
+     * 冻结
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public UserOperatorResponse freeze(Long userId) {
+        UserOperatorResponse userOperatorResponse = new UserOperatorResponse();
+        User user = userMapper.findById(userId);
+        Assert.notNull(user, () -> new UserException(USER_NOT_EXIST));
+        Assert.isTrue(user.getState() == UserStateEnum.ACTIVE, () -> new UserException(USER_STATUS_IS_NOT_ACTIVE));
+
+        //第一次删除缓存
+        idUserCache.remove(user.getId().toString());
+
+        if (user.getState() == UserStateEnum.FROZEN) {
+            userOperatorResponse.setSuccess(true);
+            return userOperatorResponse;
+        }
+        user.setState(UserStateEnum.FROZEN);
+        boolean updateResult = updateById(user);
+        Assert.isTrue(updateResult, () -> new BizException(RepoErrorCode.UPDATE_FAILED));
+        //加入流水
+        long result = userOperateStreamService.insertStream(user, UserOperateTypeEnum.FREEZE);
+        Assert.notNull(result, () -> new BizException(RepoErrorCode.UPDATE_FAILED));
+
+        //第二次删除缓存（延迟）
+        userCacheDelayDeleteService.delayedCacheDelete(idUserCache, user);
+
+        userOperatorResponse.setSuccess(true);
+        return userOperatorResponse;
+    }
+
+    /**
+     * 解冻
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public UserOperatorResponse unfreeze(Long userId) {
+        UserOperatorResponse userOperatorResponse = new UserOperatorResponse();
+        User user = userMapper.findById(userId);
+        Assert.notNull(user, () -> new UserException(USER_NOT_EXIST));
+
+        //第一次删除缓存
+        idUserCache.remove(user.getId().toString());
+
+        if (user.getState() == UserStateEnum.ACTIVE) {
+            userOperatorResponse.setSuccess(true);
+            return userOperatorResponse;
+        }
+        user.setState(UserStateEnum.ACTIVE);
+        //更新数据库
+        boolean updateResult = updateById(user);
+        Assert.isTrue(updateResult, () -> new BizException(RepoErrorCode.UPDATE_FAILED));
+        //加入流水
+        long result = userOperateStreamService.insertStream(user, UserOperateTypeEnum.UNFREEZE);
+        Assert.notNull(result, () -> new BizException(RepoErrorCode.UPDATE_FAILED));
+
+        //第二次删除缓存（延迟）
+        userCacheDelayDeleteService.delayedCacheDelete(idUserCache, user);
+
+        userOperatorResponse.setSuccess(true);
+        return userOperatorResponse;
+    }
+
+    /**
+     * 分页查询用户（按关键字 + 状态）
+     */
+    public PageResponse<User> pageQueryByState(String keyWord, String state, int currentPage, int pageSize) {
+        Page<User> page = new Page<>(currentPage, pageSize);
+        QueryWrapper<User> wrapper = new QueryWrapper<>();
+        wrapper.eq("state", state);
+
+        if (StrUtil.isNotBlank(keyWord)) {
+            wrapper.like("telephone", keyWord);
+        }
+        wrapper.orderBy(true, true, "gmt_create");
+
+        Page<User> userPage = this.page(page, wrapper);
+
+        return PageResponse.of(userPage.getRecords(), (int) userPage.getTotal(), pageSize, currentPage);
+    }
+
+    /**
+     * 手机号 + 密码查询
+     */
+    public User findByTelephoneAndPass(String telephone, String password) {
+        return userMapper.findByTelephoneAndPass(telephone, DigestUtil.md5Hex(password));
     }
 
     /**
@@ -86,9 +372,180 @@ public class UserService extends ServiceImpl<UserMapper, User> {
     }
 
     /**
-     * 通过ID查询
+     * 通过ID查询（带缓存）
      */
+    @Cached(name = ":user:cache:id:", cacheType = CacheType.BOTH, key = "#userId", cacheNullValue = true)
+    @CacheRefresh(refresh = 60, timeUnit = TimeUnit.MINUTES)
     public User findById(Long userId) {
         return userMapper.findById(userId);
+    }
+
+    /**
+     * 修改用户信息
+     */
+    @CacheInvalidate(name = ":user:cache:id:", key = "#userModifyRequest.userId")
+    @Transactional(rollbackFor = Exception.class)
+    public UserOperatorResponse modify(UserModifyRequest userModifyRequest) {
+        UserOperatorResponse userOperatorResponse = new UserOperatorResponse();
+        User user = userMapper.findById(userModifyRequest.getUserId());
+        Assert.notNull(user, () -> new UserException(USER_NOT_EXIST));
+        Assert.isTrue(user.canModifyInfo(), () -> new UserException(USER_STATUS_CANT_OPERATE));
+
+        // 昵称唯一性校验（排除自身）
+        if (StrUtil.isNotBlank(userModifyRequest.getNickName())) {
+            User byNickName = userMapper.findByNickname(userModifyRequest.getNickName());
+            if (byNickName != null && !byNickName.getId().equals(user.getId())) {
+                throw new UserException(NICK_NAME_EXIST);
+            }
+            user.setNickName(userModifyRequest.getNickName());
+        }
+        if (StrUtil.isNotBlank(userModifyRequest.getProfilePhotoUrl())) {
+            user.setProfilePhotoUrl(userModifyRequest.getProfilePhotoUrl());
+        }
+        if (StrUtil.isNotBlank(userModifyRequest.getPassword())) {
+            user.setPasswordHash(DigestUtil.md5Hex(userModifyRequest.getPassword()));
+        }
+
+        if (updateById(user)) {
+            //加入流水
+            long streamResult = userOperateStreamService.insertStream(user, UserOperateTypeEnum.MODIFY);
+            Assert.notNull(streamResult, () -> new BizException(RepoErrorCode.UPDATE_FAILED));
+            addNickName(userModifyRequest.getNickName());
+            userOperatorResponse.setSuccess(true);
+            return userOperatorResponse;
+        }
+        userOperatorResponse.setSuccess(false);
+        userOperatorResponse.setResponseCode(UserErrorCode.USER_OPERATE_FAILED.getCode());
+        userOperatorResponse.setResponseMessage(UserErrorCode.USER_OPERATE_FAILED.getMessage());
+        return userOperatorResponse;
+    }
+
+    /**
+     * 我的邀请排名
+     */
+    public Integer getInviteRank(String userId) {
+        Integer rank = inviteRank.revRank(userId);
+        if (rank != null) {
+            return rank + 1;
+        }
+        return null;
+    }
+
+    /**
+     * 我邀请的用户列表（分页）
+     */
+    public PageResponse<User> getUsersByInviterId(String inviterId, int currentPage, int pageSize) {
+        Page<User> page = new Page<>(currentPage, pageSize);
+        QueryWrapper<User> wrapper = new QueryWrapper<>();
+        wrapper.select("nick_name", "gmt_create");
+        wrapper.eq("inviter_id", inviterId);
+
+        wrapper.orderBy(true, false, "gmt_create");
+
+        Page<User> userPage = this.page(page, wrapper);
+        return PageResponse.of(userPage.getRecords(), (int) userPage.getTotal(), pageSize, currentPage);
+    }
+
+    /**
+     * 邀请排行榜 TopN
+     */
+    public List<InviteRankInfo> getTopN(Integer topN) {
+        Collection<ScoredEntry<String>> rankInfos = inviteRank.entryRangeReversed(0, topN - 1);
+
+        List<InviteRankInfo> inviteRankInfos = new ArrayList<>();
+
+        if (rankInfos != null) {
+            for (ScoredEntry<String> rankInfo : rankInfos) {
+                InviteRankInfo inviteRankInfo = new InviteRankInfo();
+                String userId = rankInfo.getValue();
+                if (StringUtils.isNotBlank(userId)) {
+                    User user = findById(Long.valueOf(userId));
+                    if (user != null) {
+                        inviteRankInfo.setNickName(user.getNickName());
+                        inviteRankInfo.setInviteCode(user.getInviteCode());
+                        inviteRankInfo.setInviteScore(rankInfo.getScore().intValue());
+                        inviteRankInfos.add(inviteRankInfo);
+                    }
+                }
+            }
+        }
+
+        return inviteRankInfos;
+    }
+
+    /**
+     * 昵称是否存在（布隆过滤器 + 数据库二次确认）
+     */
+    public boolean nickNameExist(String nickName) {
+        //如果布隆过滤器中存在，再进行数据库二次判断
+        if (this.nickNameBloomFilter != null && this.nickNameBloomFilter.contains(nickName)) {
+            return userMapper.findByNickname(nickName) != null;
+        }
+        return false;
+    }
+
+    /**
+     * 邀请码是否存在（布隆过滤器 + 数据库二次确认）
+     */
+    public boolean inviteCodeExist(String inviteCode) {
+        //如果布隆过滤器中存在，再进行数据库二次判断
+        if (this.inviteCodeBloomFilter != null && this.inviteCodeBloomFilter.contains(inviteCode)) {
+            return userMapper.findByInviteCode(inviteCode) != null;
+        }
+        return false;
+    }
+
+    private boolean addNickName(String nickName) {
+        if (nickName != null) {
+            return this.nickNameBloomFilter != null && this.nickNameBloomFilter.add(nickName);
+        }
+        return true;
+    }
+
+    private boolean addInviteCode(String inviteCode) {
+        if (inviteCode != null) {
+            return this.inviteCodeBloomFilter != null && this.inviteCodeBloomFilter.add(inviteCode);
+        }
+        return true;
+    }
+
+    /**
+     * 更新排名，排名规则：
+     * <pre>
+     *     1、优先按照分数排，分数越大的，排名越靠前
+     *     2、分数相同，则按照上榜时间排，上榜越早的排名越靠前
+     * </pre>
+     */
+    private void updateInviteRank(String inviterId) {
+        if (inviterId == null) {
+            return;
+        }
+        //1、这里因为是一个私有方法，无法通过注解方式实现分布式锁。
+        //2、register方法已经加了锁，这里需要二次加锁的原因是register锁的是注册人，这里锁的是邀请人
+        RLock rLock = redissonClient.getLock(inviterId);
+        rLock.lock();
+        try {
+            //获取当前用户的积分
+            Double score = inviteRank.getScore(inviterId);
+            if (score == null) {
+                score = 0.0;
+            }
+
+            //获取最近一次上榜时间
+            long currentTimeStamp = System.currentTimeMillis();
+            //把上榜时间转成小数（时间戳13位，所以除以10000000000000能转成小数），并且倒序排列（用1减），即上榜时间越早，分数越大
+            double timePartScore = 1 - (double) currentTimeStamp / 10000000000000L;
+
+            //1、当前积分保留整数，即移除上一次的小数位
+            //2、当前积分加100，表示新邀请了一个用户
+            //3、加上"最近一次上榜时间的倒序小数位"作为score
+            inviteRank.add(score.intValue() + 100.0 + timePartScore, inviterId);
+        } finally {
+            rLock.unlock();
+        }
+    }
+
+    private void updateUserCache(String userId, User user) {
+        idUserCache.put(userId, user);
     }
 }

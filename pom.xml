@@ -35,6 +35,8 @@
         <module>service-user</module>
         <module>service-goods</module>
         <module>service-notice</module>
+        <module>service-admin</module>
+        <module>service-chain</module>
     </modules>
 
     <dependencyManagement>
@@ -132,6 +134,12 @@
             <dependency>
                 <groupId>cn.hollis</groupId>
                 <artifactId>common-sms</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>cn.hollis</groupId>
+                <artifactId>common-file</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

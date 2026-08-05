@@ -18,3 +18,10 @@ nft:
         group: dubbo1  # nft.turbo.dubbo.nacos.group - 自己到nacos上创建一个给dubbo用的 group，然后和这里保持一致，首次启动前务必修改成你自己的 #首次启动前务必修改成你自己的
     sentinel:
       url: localhost:8080 # nft.turbo.sentinel.url - Sentinel Dashboard 的地址，首次启动前务必修改成你自己的
+    chain:
+      type: MOCK  # nft.turbo.chain.type - 链类型：MOCK（Mock链，默认）/ WEN_CHANG（文昌链）
+      wenchang:   # nft.turbo.chain.wenchang.* - 文昌链配置，使用真实链时填写
+        host: ''        # nft.turbo.chain.wenchang.host
+        api-key: ''     # nft.turbo.chain.wenchang.api-key
+        api-secret: ''  # nft.turbo.chain.wenchang.api-secret
+        chain-addr-super: ''  # nft.turbo.chain.wenchang.chain-addr-super - 平台默认持有者地址
